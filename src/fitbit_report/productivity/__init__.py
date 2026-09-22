@@ -1,0 +1,1 @@
+"""Productivity check-in domain."""
