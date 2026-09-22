@@ -96,12 +96,13 @@ def test_in_process_scheduler_runs_sync_and_daily_report_once():
     assert report_calls == [("daily", date(2026, 8, 11))]
 
 
-def test_scheduler_runs_fatsecret_import_once_at_configured_time():
+def test_scheduler_runs_fatsecret_import_once_at_configured_time(caplog):
     import asyncio
     from pathlib import Path
 
     from fitbit_report.types import DateRange, ReportResult, SyncSummary
 
+    caplog.set_level(20, logger="fitbit_report.runtime")
     calls = []
 
     async def sync(day=None):
@@ -115,7 +116,7 @@ def test_scheduler_runs_fatsecret_import_once_at_configured_time():
 
     async def fatsecret(day):
         calls.append(day)
-        return {"status": "success", "food_count": 3}
+        return {"status": "private-status-value", "food_count": 987654321}
 
     settings = type("Settings", (), {
         "sync_interval_minutes": 240,
@@ -138,6 +139,9 @@ def test_scheduler_runs_fatsecret_import_once_at_configured_time():
 
     asyncio.run(exercise())
     assert calls == [date(2026, 8, 12)]
+    assert "scheduled FatSecret import attempt completed date=2026-08-12" in caplog.text
+    assert "private-status-value" not in caplog.text
+    assert "987654321" not in caplog.text
 
 
 def test_scheduler_notifies_only_after_successful_generation():

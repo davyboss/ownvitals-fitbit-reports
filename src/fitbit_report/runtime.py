@@ -199,13 +199,8 @@ class InProcessScheduler:
             return
         async with self._lock:
             try:
-                summary = await self.run_fatsecret_sync(day)
-                logger.info(
-                    "scheduled FatSecret import date=%s status=%s foods=%s",
-                    day,
-                    summary.get("status", "unknown"),
-                    summary.get("food_count", 0),
-                )
+                await self.run_fatsecret_sync(day)
+                logger.info("scheduled FatSecret import attempt completed date=%s", day)
             except Exception:
                 logger.exception("scheduled FatSecret import failed; continuing")
 
