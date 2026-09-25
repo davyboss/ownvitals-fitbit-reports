@@ -136,6 +136,7 @@ class InProcessScheduler:
         self._last_backup: date | None = None
         self._last_sync: datetime | None = None
         self._last_fatsecret_sync: date | None = None
+        self._report_retry_state: dict[tuple[ReportType, date], tuple[int, datetime]] = {}
         self._lock = asyncio.Lock()
 
     async def run_forever(self) -> None:
@@ -163,17 +164,29 @@ class InProcessScheduler:
         daily_hour, daily_minute = _parse_clock(self.settings.daily_report_time)
         if now.hour > daily_hour or (now.hour == daily_hour and now.minute >= daily_minute):
             target_day = now.date() - timedelta(days=1)
-            if self._last_daily != now.date() and await self._run_scheduled_report("daily", target_day):
+            if (
+                self._last_daily != now.date()
+                and self._report_retry_due("daily", target_day, now)
+                and await self._run_scheduled_report("daily", target_day, now)
+            ):
                 self._last_daily = now.date()
         weekly_hour, weekly_minute = _parse_clock(self.settings.weekly_report_time)
         if now.weekday() == self.settings.weekly_report_weekday and (now.hour, now.minute) >= (weekly_hour, weekly_minute):
             target_day = now.date() - timedelta(days=1)
-            if self._last_weekly != now.date() and await self._run_scheduled_report("weekly", target_day):
+            if (
+                self._last_weekly != now.date()
+                and self._report_retry_due("weekly", target_day, now)
+                and await self._run_scheduled_report("weekly", target_day, now)
+            ):
                 self._last_weekly = now.date()
         monthly_hour, monthly_minute = _parse_clock(self.settings.monthly_report_time)
         if now.day == 1 and (now.hour, now.minute) >= (monthly_hour, monthly_minute):
             target_day = now.date() - timedelta(days=1)
-            if self._last_monthly != now.date() and await self._run_scheduled_report("monthly", target_day):
+            if (
+                self._last_monthly != now.date()
+                and self._report_retry_due("monthly", target_day, now)
+                and await self._run_scheduled_report("monthly", target_day, now)
+            ):
                 self._last_monthly = now.date()
         backup_hour, backup_minute = _parse_clock(self.settings.backup_time)
         if (now.hour, now.minute) >= (backup_hour, backup_minute) and self._last_backup != now.date():
@@ -189,10 +202,38 @@ class InProcessScheduler:
             except Exception:
                 logger.exception("scheduled operation failed; continuing")
 
-    async def _run_scheduled_report(self, report_type: ReportType, target_day: date) -> bool:
-        if not await self._sync_for_report(report_type, target_day):
-            return False
-        return await self._run_report(report_type, target_day)
+    def _report_retry_due(
+        self, report_type: ReportType, target_day: date, now: datetime
+    ) -> bool:
+        retry_state = self._report_retry_state.get((report_type, target_day))
+        return retry_state is None or now >= retry_state[1]
+
+    async def _run_scheduled_report(
+        self, report_type: ReportType, target_day: date, now: datetime
+    ) -> bool:
+        succeeded = False
+        if await self._sync_for_report(report_type, target_day):
+            succeeded = await self._run_report(report_type, target_day)
+        retry_key = (report_type, target_day)
+        if succeeded:
+            self._report_retry_state.pop(retry_key, None)
+            return True
+
+        failures, _ = self._report_retry_state.get(retry_key, (0, now))
+        failures += 1
+        retry_minutes = min(5 * (2 ** (failures - 1)), 60)
+        self._report_retry_state[retry_key] = (
+            failures,
+            now + timedelta(minutes=retry_minutes),
+        )
+        logger.warning(
+            "scheduled report retry delayed type=%s period_end=%s failures=%s retry_in_minutes=%s",
+            report_type,
+            target_day,
+            failures,
+            retry_minutes,
+        )
+        return False
 
     async def _run_fatsecret_sync(self, day: date) -> None:
         if self._lock.locked() or self.run_fatsecret_sync is None:
