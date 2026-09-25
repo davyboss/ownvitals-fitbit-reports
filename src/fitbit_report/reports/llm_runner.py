@@ -250,6 +250,12 @@ def _normalize_report_payload(payload: object) -> object:
                 normalized_claim["alternatives"] = normalized_claim[
                     "alternative_explanations"
                 ]
+            alternatives = normalized_claim.get("alternatives")
+            if isinstance(alternatives, str):
+                alternatives = alternatives.strip()
+                normalized_claim["alternatives"] = [alternatives] if alternatives else []
+            elif alternatives is None:
+                normalized_claim["alternatives"] = []
             if normalized_claim.get("confidence") == "none":
                 normalized_claim["confidence"] = "insufficient"
             normalized_claims.append(normalized_claim)

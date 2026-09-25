@@ -4,7 +4,7 @@ from fitbit_report.i18n import Locale
 from fitbit_report.reports.context import ReportContext
 
 
-PROMPT_VERSION = "18"
+PROMPT_VERSION = "19"
 
 
 def _build_english_prompt(context: ReportContext) -> str:
@@ -52,8 +52,9 @@ def _build_english_prompt(context: ReportContext) -> str:
         "treatment. Temporal proximity alone is not an association; require repeated observations. Return "
         "JSON only with summary, claims, recommendations, experiments, confidence. Every claim must use "
         "exactly statement, kind, evidence_count, confidence, alternatives, source_ids. kind must be fact, "
-        "association, or hypothesis. confidence must be insufficient, low, medium, or high. source_ids must "
-        "contain string source references. recommendations and experiments must each be JSON arrays of "
+        "association, or hypothesis. confidence must be insufficient, low, medium, or high. "
+        "Each claim's alternatives and source_ids must be JSON arrays of strings; use [] when none apply. "
+        "source_ids must contain string source references. recommendations and experiments must each be JSON arrays of "
         "plain strings, never objects.\n\n"
         + json.dumps(context.as_dict(), default=str, ensure_ascii=False)
     )
@@ -103,8 +104,9 @@ def build_prompt(context: ReportContext, locale: Locale = "ru") -> str:
         "нужны повторяющиеся наблюдения. Учитывай исправления пользователя. Верни "
         "только JSON с полями summary, claims, recommendations, experiments, confidence. "
         "Для каждого claim используй ровно ключи statement, kind, evidence_count, "
-        "confidence, alternatives, source_ids. source_ids — это строковые ссылки на "
-        "источники, например health.sleep:2026-08-14 или event:1. Используй kind, а не type. Допустимые "
+        "confidence, alternatives, source_ids. Поле alternatives всегда должно быть JSON-массивом строк; "
+        "если альтернатив нет, верни []. Поле source_ids — строковые ссылки на источники, например "
+        "health.sleep:2026-08-14 или event:1. Используй kind, а не type. Допустимые "
         "kind: fact, association, hypothesis. Допустимые confidence: insufficient, low, "
         "medium, high; используй insufficient, а не none. Используй alternatives, а не "
         "alternative_explanations. recommendations и experiments должны быть JSON-массивами "
